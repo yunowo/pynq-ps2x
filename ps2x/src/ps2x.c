@@ -2,6 +2,7 @@
 #include "gpio.h"
 #include "timer.h"
 #include "xio_switch.h"
+#include "xil_printf.h"
 
 #define _BV(bit) (1 << (bit))
 
@@ -15,7 +16,7 @@ gpio gpio_clock;
 gpio gpio_command;
 gpio gpio_attention;
 
-static u8 data[21];
+static u8 data[9];
 
 /* Private. The actual serial transfer. Handles clock. The PSX controller is full
  * duplex, so this will send a byte as well as receive one.
@@ -34,18 +35,20 @@ u8 _ps2x_gamepad_shift(u8 transmit_byte) {
 		}
 
 		//...wait half the clock cycle...
-		delay_us(CTRL_CLK);
+		delay_ms(CTRL_CLK);
 
 		//...raise the clock to HIGH...
 		gpio_write(gpio_clock, 1);
 
 		//...at which point you read the data...
-		if (gpio_read(gpio_data)) {
+		int rd = gpio_read(gpio_data);
+		xil_printf("%d ", rd);
+		if (rd) {
 			received_byte |= _BV(i);
 		}
 
 		//...and wait the other half of the clock cycle
-		delay_us(CTRL_CLK);
+		delay_ms(CTRL_CLK);
 	}
 
 	//Clock should already be high at this point, but just to be sure...
@@ -76,19 +79,21 @@ void _ps2x_send_command(u8 send_data[], u8 size) {
 void ps2x_read_gamepad() {
 	data[0] = 0x01;
 	data[1] = 0x42;
-	for (u8 i = 2; i < 21; i++) {
+	for (u8 i = 2; i < 9; i++) {
 		data[i] = 0x00;
 	}
-	_ps2x_send_command(data, 21);
+	_ps2x_send_command(data, 9);
 }
 
 void ps2x_init() {
+	print("Init started.");
+
 	gpio_set_direction(gpio_data, GPIO_IN);
 	gpio_set_direction(gpio_clock, GPIO_OUT);
 	gpio_set_direction(gpio_command, GPIO_OUT);
 	gpio_set_direction(gpio_attention, GPIO_OUT);
 
-	//Initialize game pad
+	//Init gamepad
 	gpio_write(gpio_clock, 1);
 	gpio_write(gpio_command, 1);
 
@@ -108,6 +113,7 @@ void ps2x_init() {
 	u8 exit_config_command[] = { 0x01, 0x43, 0x00, 0x00, 0x5A, 0x5A, 0x5A, 0x5A,
 			0x5A };
 	_ps2x_send_command(exit_config_command, 9);
+	print("Init finished.");
 }
 
 int main(void) {
@@ -127,7 +133,7 @@ int main(void) {
 		switch (cmd) {
 		case READ_GAMEPAD:
 			ps2x_read_gamepad();
-			for (int i = 0; i < 21; i++) {
+			for (int i = 0; i < 9; i++) {
 				MAILBOX_DATA(i) = data[i];
 			}
 			MAILBOX_CMD_ADDR = 0x0;
