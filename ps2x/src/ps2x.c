@@ -2,14 +2,13 @@
 #include "gpio.h"
 #include "timer.h"
 #include "xio_switch.h"
-#include "xil_printf.h"
 
 #define _BV(bit) (1 << (bit))
 
 #define READ_GAMEPAD       0x1
 #define INIT_GAMEPAD       0x2
 
-#define CTRL_CLK        4
+#define CTRL_CLK        10
 
 gpio gpio_data;
 gpio gpio_clock;
@@ -35,20 +34,18 @@ u8 _ps2x_gamepad_shift(u8 transmit_byte) {
 		}
 
 		//...wait half the clock cycle...
-		delay_ms(CTRL_CLK);
+		delay_us(CTRL_CLK);
 
 		//...raise the clock to HIGH...
 		gpio_write(gpio_clock, 1);
 
 		//...at which point you read the data...
-		int rd = gpio_read(gpio_data);
-		xil_printf("%d ", rd);
-		if (rd) {
+		if (gpio_read(gpio_data)) {
 			received_byte |= _BV(i);
 		}
 
 		//...and wait the other half of the clock cycle
-		delay_ms(CTRL_CLK);
+		delay_us(CTRL_CLK);
 	}
 
 	//Clock should already be high at this point, but just to be sure...
@@ -86,8 +83,6 @@ void ps2x_read_gamepad() {
 }
 
 void ps2x_init() {
-	print("Init started.");
-
 	gpio_set_direction(gpio_data, GPIO_IN);
 	gpio_set_direction(gpio_clock, GPIO_OUT);
 	gpio_set_direction(gpio_command, GPIO_OUT);
@@ -113,16 +108,15 @@ void ps2x_init() {
 	u8 exit_config_command[] = { 0x01, 0x43, 0x00, 0x00, 0x5A, 0x5A, 0x5A, 0x5A,
 			0x5A };
 	_ps2x_send_command(exit_config_command, 9);
-	print("Init finished.");
 }
 
 int main(void) {
 	u32 cmd;
 
-	gpio_data = gpio_open(14); // A0
-	gpio_clock = gpio_open(17); // A3
-	gpio_command = gpio_open(15); // A1
-	gpio_attention = gpio_open(16); // A2
+	gpio_data = gpio_open(0); // D0
+	gpio_clock = gpio_open(3); // D3
+	gpio_command = gpio_open(1); // D1
+	gpio_attention = gpio_open(2); // D2
 
 	ps2x_init();
 
@@ -133,7 +127,7 @@ int main(void) {
 		switch (cmd) {
 		case READ_GAMEPAD:
 			ps2x_read_gamepad();
-			for (int i = 0; i < 9; i++) {
+			for (u8 i = 0; i < 9; i++) {
 				MAILBOX_DATA(i) = data[i];
 			}
 			MAILBOX_CMD_ADDR = 0x0;
