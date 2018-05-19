@@ -17,53 +17,43 @@ gpio gpio_attention;
 
 static u8 data[9];
 
-/* Private. The actual serial transfer. Handles clock. The PSX controller is full
- * duplex, so this will send a byte as well as receive one.
- */
 u8 _ps2x_gamepad_shift(u8 transmit_byte) {
     u8 received_byte = 0;
     for (u8 i = 0; i < 8; i++) {
-        //Drop the clock...
-        gpio_write(gpio_clock, 0);
-
-        //...set the command (outgoing) pin...
+        // set the command pin
         if (transmit_byte & (_BV(i))) {
             gpio_write(gpio_command, 1);
         } else {
             gpio_write(gpio_command, 0);
         }
 
-        //...wait half the clock cycle...
+        // drop the clock
+        gpio_write(gpio_clock, 0);
+
+        // wait half the clock cycle
         delay_us(CTRL_CLK);
 
-        //...raise the clock to HIGH...
-        gpio_write(gpio_clock, 1);
-
-        //...at which point you read the data...
+        // at which point you read the data
         if (gpio_read(gpio_data)) {
             received_byte |= _BV(i);
         }
 
-        //...and wait the other half of the clock cycle
-        delay_us(CTRL_CLK);
+        // raise the clock to high
+        gpio_write(gpio_clock, 1);
+
+        // and wait the other half of the clock cycle
+        // delay_us(CTRL_CLK);
     }
 
-    //Clock should already be high at this point, but just to be sure...
-    gpio_write(gpio_clock, 1);
+    gpio_write(gpio_command, 1);
+    delay_us(CTRL_CLK - 1);
 
     return received_byte;
 }
 
-/* Private.  Sends a command using the shift method. */
 void _ps2x_send_command(u8 send_data[], u8 size) {
-    //Before you submit each command packet, you must set attention low; once
-    // you are done each packet, return it high.  You have to toggle the line before
-    // you submit another command.
     gpio_write(gpio_attention, 0);
     gpio_write(gpio_command, 1);
-
-    //Clock should always be high; it is an active low line...
-    gpio_write(gpio_clock, 1);
 
     for (u8 i = 0; i < size; i++) {
         send_data[i] = _ps2x_gamepad_shift(send_data[i]);
@@ -72,7 +62,6 @@ void _ps2x_send_command(u8 send_data[], u8 size) {
     gpio_write(gpio_attention, 1);
 }
 
-/* Updates the current value of the game pad. */
 void ps2x_read_gamepad() {
     data[0] = 0x01;
     data[1] = 0x42;
@@ -109,11 +98,13 @@ int main(void) {
     u32 cmd;
 
     // init_io_switch();
-    /* +------+-----+---+---+---+---+
-       | 3.3V | GND | 3 | 2 | 1 | 0 |
-       +------+-----+---+---+---+---+
-       | 3.3V | GND | 7 | 6 | 5 | 4 |
-       +------+-----+---+---+---+---+ */
+    /*
+     +------+-----+---+---+---+---+
+     | 3.3V | GND | 3 | 2 | 1 | 0 |
+     +------+-----+---+---+---+---+
+     | 3.3V | GND | 7 | 6 | 5 | 4 |
+     +------+-----+---+---+---+---+
+     */
     gpio_data = gpio_open(3);
     gpio_clock = gpio_open(0);
     gpio_command = gpio_open(2);
